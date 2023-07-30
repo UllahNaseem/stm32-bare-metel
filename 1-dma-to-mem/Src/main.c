@@ -1,24 +1,63 @@
 #include "stm32f4xx.h"
+#include <stdio.h>
+#include "dma.h"
+#include "uart.h"
 
-#define GPIOAEN     (1U<<0)
-#define PIN5        (1U<<5)
-#define LED_PIN     PIN5
+#define BUFFER_SIZE     5
+
+uint16_t sensor_data[BUFFER_SIZE] = { 892, 731, 1234, 90, 23 };
+uint16_t data_transfer[BUFFER_SIZE];
+
+volatile uint8_t g_transfer_cmplt;
 
 int main(void)
 {
-    /* Enable clock access to GPIOA */
-    RCC->AHB1ENR |= GPIOAEN;
+    g_transfer_cmplt = 0;
 
-    /* Set PA5 to output mode */
-    GPIOA->MODER |= (1U << 10);
-    GPIOA->MODER &= ~(1U << 11);
+    uart2_tx_init();
+
+    dmaMemToMemConfig();
+
+    dmaTransferStart((uint32_t) sensor_data, (uint32_t) data_transfer, BUFFER_SIZE);
+
+    /* Wait until transfer complete */
+    while (!g_transfer_cmplt)
+    {
+        /* Do nothing */
+    }
+
+    for (int i = 0; i < BUFFER_SIZE; i++)
+    {
+        printf("Temporary buffer[%d]: %d\r\n", i, data_transfer[i]);
+    }
+
+    g_transfer_cmplt = 0;
 
     while (1)
     {
-        GPIOA->ODR ^= LED_PIN;
-        for (int i = 0; i < 1000000; i++)
-        {
-            /* Do nothing */
-        }
+
     }
+}
+
+void DMA2_Stream0_IRQHandler(void)
+{
+
+    /* Check if transfer complete interrupt occurred */
+    if ((DMA2->LISR) & LISR_TCIF0)
+    {
+        g_transfer_cmplt = 1;
+
+        /* Clear flag */
+        DMA2->LIFCR |= LIFCR_CTCIF0;
+    }
+
+    /* Check if transfer error occurred */
+    if ((DMA2->LISR) & LISR_TEIF0)
+    {
+        /* Do something... */
+        /* Clear flag */
+        DMA2->LIFCR |= LIFCR_CTEIF0;
+
+    }
+
 }
